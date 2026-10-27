@@ -1,9 +1,11 @@
 name: publish
 
 # Publish to PyPI via Trusted Publishing (OIDC) — no API token is stored.
-# Triggers on pushing a semver tag (v1.2.3), or manually for the first release.
+# Pull requests and main pushes validate artifacts; version tags publish them.
 on:
+  pull_request:
   push:
+    branches: [main]
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -21,19 +23,41 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Run offline tests
+        run: uv run --no-sync pytest -m "not network"
+
+      - name: Validate package and release versions
+        run: |
+          uv run --no-sync python - <<'PYTHON'
+          import json
+          import os
+          import runpy
+          import tomllib
+          from pathlib import Path
+
+          project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+          version = project["version"]
+          module = runpy.run_path("src/vat_whitelist_mcp/__init__.py")
+          registry = json.loads(Path("server.json").read_text())
+          assert project["name"] == "vat-whitelist-mcp"
+          assert module["__version__"] == registry["version"] == version
+          assert registry["packages"][0]["identifier"] == project["name"]
+          assert registry["packages"][0]["version"] == version
+          if os.environ["GITHUB_REF_TYPE"] == "tag":
+              assert os.environ["GITHUB_REF_NAME"] == f"v{version}", "Tag must match package version"
+          print(f"Validated {project['name']} {version}")
+          PYTHON
+
       - name: Build sdist and wheel
         run: uv build
 
-      - name: Ensure the git tag matches the package version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(grep -m1 -E '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')"
-          echo "git tag: $tag / pyproject: $pkg"
-          if [ "$tag" != "$pkg" ]; then
-            echo "::error::Git tag v$tag does not match pyproject version $pkg"
-            exit 1
-          fi
+      - name: Check installed wheel
+        run: >-
+          uv run --isolated --no-project --with ./dist/vat_whitelist_mcp-*.whl
+          python -c "from importlib.metadata import version; from vat_whitelist_mcp.server import mcp; assert mcp.name == 'vat-whitelist'; print(version('vat-whitelist-mcp'))"
 
       - name: Validate distribution metadata
         run: uvx twine check dist/*
@@ -46,6 +70,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
     environment:

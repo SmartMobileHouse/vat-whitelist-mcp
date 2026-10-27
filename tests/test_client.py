@@ -1,158 +1,210 @@
-"""Mocked-transport tests for the session lifecycle and response handling.
+"""Offline contract tests using mocked HTTP, including partial batch failures."""
 
-These use httpx.MockTransport so no network is touched: they verify login/sid
-parsing, session reuse within the TTL, MTOM extraction, that a session fault
-triggers exactly one re-login + retry, that transport errors propagate WITHOUT a
-re-login storm, and that malformed inner XML surfaces as a protocol error.
-"""
-
-import re
+import json
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 
-from vat_whitelist_mcp.client import (
-    RegonClient,
-    RegonConfig,
-    RegonProtocolError,
-    RegonTransportError,
-)
+from vat_whitelist_mcp import client as module
+from vat_whitelist_mcp.client import ENDPOINTS, VatClient, VatConfig
+from vat_whitelist_mcp.errors import VatApiError, VatProtocolError, VatTransportError
 
-NS = "http://CIS/BIR/PUBL/2014/07"
-
-GUS_ROW = (
-    "&lt;root&gt;&lt;dane&gt;&lt;Nip&gt;5261040828&lt;/Nip&gt;"
-    "&lt;Nazwa&gt;GUS&lt;/Nazwa&gt;&lt;Typ&gt;P&lt;/Typ&gt;&lt;/dane&gt;&lt;/root&gt;"
-)
+DATE = datetime.now(ZoneInfo("Europe/Warsaw")).date().isoformat()
+NIP = "3245174504"
+REGON = "755016841"
+ACCOUNT = "70506405335016096312945164"
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _mtom(body_inner: str) -> str:
-    env = (
-        '<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">'
-        f"<s:Body>{body_inner}</s:Body></s:Envelope>"
-    )
-    return (
-        "\r\n--uuid:boundary\r\n"
-        'Content-Type: application/xop+xml;charset=utf-8;type="application/soap+xml"\r\n\r\n'
-        f"{env}\r\n--uuid:boundary--\r\n"
-    )
+def fixture(name):
+    return json.loads((FIXTURES / f"{name}.json").read_text())
 
 
-def _zaloguj(sid):
-    return _mtom(f'<ZalogujResponse xmlns="{NS}"><ZalogujResult>{sid}</ZalogujResult></ZalogujResponse>')
+@pytest.fixture
+def make_client():
+    clients = []
+
+    def make(handler, config=None):
+        instance = VatClient(config)
+        instance._http.close()
+        instance._http = httpx.Client(transport=httpx.MockTransport(handler))
+        clients.append(instance)
+        return instance
+
+    yield make
+    for instance in clients:
+        instance.close()
 
 
-def _wyloguj():
-    return _mtom(f'<WylogujResponse xmlns="{NS}"><WylogujResult>true</WylogujResult></WylogujResponse>')
-
-
-def _search(inner):
-    return _mtom(
-        f'<DaneSzukajPodmiotyResponse xmlns="{NS}">'
-        f"<DaneSzukajPodmiotyResult>{inner}</DaneSzukajPodmiotyResult></DaneSzukajPodmiotyResponse>"
-    )
-
-
-def _fault(text):
-    return _mtom(
-        "<s:Fault><s:Code><s:Value>s:Receiver</s:Value></s:Code>"
-        f'<s:Reason><s:Text xml:lang="pl">{text}</s:Text></s:Reason></s:Fault>'
-    )
-
-
-def _action(request):
-    m = re.search(r'action="([^"]+)"', request.headers.get("content-type", ""))
-    return m.group(1).rsplit("/", 1)[-1] if m else ""
-
-
-class FakeGus:
-    def __init__(self, mode="ok"):
-        self.mode = mode  # "ok" | "expire_once" | "malformed"
-        self.zaloguj = self.search = self.wyloguj = 0
-
-    def handler(self, request):
-        action = _action(request)
-        if action == "Zaloguj":
-            self.zaloguj += 1
-            return httpx.Response(200, text=_zaloguj(f"SID{self.zaloguj}"))
-        if action == "Wyloguj":
-            self.wyloguj += 1
-            return httpx.Response(200, text=_wyloguj())
-        if action == "DaneSzukajPodmioty":
-            self.search += 1
-            if self.mode == "expire_once" and self.search == 1:
-                return httpx.Response(200, text=_fault("Identyfikator sesji jest niepoprawny"))
-            if self.mode == "malformed":
-                return httpx.Response(200, text=_search("&lt;root&gt;&lt;dane&gt;&lt;Nip&gt;"))
-            return httpx.Response(200, text=_search(GUS_ROW))
-        return httpx.Response(500)
-
-
-def _client(handler):
-    c = RegonClient(RegonConfig(api_key="k", environment="prod"))
-    c._http = httpx.Client(transport=httpx.MockTransport(handler))
-    return c
-
-
-def test_login_parses_sid():
-    fake = FakeGus()
-    assert _client(fake.handler).login() == "SID1"
-    assert fake.zaloguj == 1
-
-
-def test_session_reused_within_ttl():
-    fake = FakeGus()
-    c = _client(fake.handler)
-    c.search(nip="5261040828")
-    c.search(nip="5261040828")
-    assert fake.zaloguj == 1  # one login serves both searches
-    assert fake.search == 2
-
-
-def test_mtom_extraction_and_parsing():
-    rows = _client(FakeGus().handler).search(nip="5261040828")
-    assert rows and rows[0]["name"] == "GUS" and rows[0]["type_label"] == "legal person"
-
-
-def test_session_fault_triggers_single_retry():
-    fake = FakeGus(mode="expire_once")
-    rows = _client(fake.handler).search(nip="5261040828")
-    assert rows and rows[0]["name"] == "GUS"
-    assert fake.zaloguj == 2  # initial login + exactly one re-login
-    assert fake.search == 2  # faulted call + one retry
-
-
-def test_transport_error_on_login_propagates():
-    def boom(request):
-        raise httpx.ConnectError("no route", request=request)
-
-    with pytest.raises(RegonTransportError):
-        _client(boom).login()
-
-
-def test_transport_error_on_search_does_not_relogin():
-    state = {"zaloguj": 0}
+@pytest.mark.parametrize("kind,value,path", [("nip", NIP, "nip"), ("regon", REGON, "regon"), ("bank_account", ACCOUNT, "bank-account")])
+@pytest.mark.parametrize("environment", ["test", "prod"])
+def test_search_routes_and_preserves_full_response(make_client, kind, value, path, environment):
+    payload = fixture("search_result")
+    if kind == "bank_account":
+        payload["result"]["subjects"] = [payload["result"].pop("subject")]
 
     def handler(request):
-        if _action(request) == "Zaloguj":
-            state["zaloguj"] += 1
-            return httpx.Response(200, text=_zaloguj("SID1"))
-        raise httpx.ReadTimeout("slow", request=request)
+        assert request.method == "GET"
+        assert str(request.url).split("?")[0] == ENDPOINTS[environment] + f"search/{path}/{value}"
+        assert dict(request.url.params) == {"date": DATE}
+        return httpx.Response(200, json=payload)
 
-    c = _client(handler)
-    with pytest.raises(RegonTransportError):
-        c.search(nip="5261040828")
-    assert state["zaloguj"] == 1  # no re-login storm on a transport error
+    with make_client(handler, VatConfig(environment=environment)) as instance:
+        assert instance.search(value, kind, DATE) == payload["result"]
 
 
-def test_malformed_inner_xml_raises_protocol_error():
-    with pytest.raises(RegonProtocolError):
-        _client(FakeGus(mode="malformed").handler).search(nip="5261040828")
+@pytest.mark.parametrize("kind,values,path", [
+    ("nip", [NIP, "1854510877"], "nips"),
+    ("regon", [REGON, "000331501"], "regons"),
+    ("bank_account", [ACCOUNT, "61109010140000071219812874"], "bank-accounts"),
+])
+def test_batch_uses_one_plural_endpoint(make_client, kind, values, path):
+    calls = []
+    payload = fixture("batch_result")
+    payload["result"]["entries"] = [{"identifier": v, "subjects": []} for v in reversed(values)]
+
+    def handler(request):
+        calls.append(request)
+        assert request.url.path == f"/api/search/{path}/{','.join(values)}"
+        assert dict(request.url.params) == {"date": DATE}
+        return httpx.Response(200, json=payload)
+
+    assert make_client(handler).search_bulk(values, kind, DATE) == payload["result"]
+    assert len(calls) == 1
 
 
-def test_logout_calls_wyloguj():
-    fake = FakeGus()
-    c = _client(fake.handler)
-    c.login()
-    assert c.logout() is True
-    assert fake.wyloguj == 1
+def test_batch_preserves_success_empty_and_error_entries(make_client):
+    payload = fixture("batch_result")
+    instance = make_client(lambda _: httpx.Response(200, json=payload))
+    assert instance.search_bulk([NIP, "1854510877", "7250018312"], "nip", DATE) == payload["result"]
+
+
+@pytest.mark.parametrize("kind,value", [("nip", NIP), ("regon", REGON)])
+@pytest.mark.parametrize("answer", ["TAK", "NIE"])
+def test_check_both_identifiers_and_answers(make_client, kind, value, answer):
+    payload = fixture("check_result")
+    payload["result"]["accountAssigned"] = answer
+
+    def handler(request):
+        assert request.url.path == f"/api/check/{kind}/{value}/bank-account/{ACCOUNT}"
+        assert dict(request.url.params) == {"date": DATE}
+        return httpx.Response(200, json=payload)
+
+    result = make_client(handler).check_bank_account(value, kind, "PL" + ACCOUNT, DATE)
+    assert result == payload["result"]
+
+
+@pytest.mark.parametrize("operation", [
+    lambda c: c.search("bad", "nip", DATE),
+    lambda c: c.search(NIP, "krs", DATE),
+    lambda c: c.search(NIP, "nip", "2999-01-01"),
+    lambda c: c.search(NIP, "nip", "2024-02-30"),
+    lambda c: c.search_bulk([], "nip", DATE),
+    lambda c: c.search_bulk([NIP] * 31, "nip", DATE),
+    lambda c: c.search_bulk([NIP, "bad"], "nip", DATE),
+    lambda c: c.search_bulk(NIP, "nip", DATE),
+    lambda c: c.check_bank_account(NIP, "bank_account", ACCOUNT, DATE),
+    lambda c: c.check_bank_account(NIP, "nip", "invalid", DATE),
+])
+def test_invalid_input_never_sends_http(make_client, operation):
+    def handler(_):
+        pytest.fail("invalid input must not send a request")
+
+    with pytest.raises(ValueError):
+        operation(make_client(handler))
+
+
+@pytest.mark.parametrize("payload,kind", [
+    ({"subject": None}, "nip"),
+    ({"subjects": []}, "bank_account"),
+])
+def test_explicit_no_matches(make_client, payload, kind):
+    payload.update(requestId="confirmation", requestDateTime="27-10-2026 12:00:00")
+    result = make_client(lambda _: httpx.Response(200, json={"result": payload})).search(ACCOUNT if kind == "bank_account" else NIP, kind, DATE)
+    assert result == payload
+
+
+@pytest.mark.parametrize("status,code", [(400, "WL-118"), (429, "WL-191"), (500, "WL-197"), (200, "WL-195")])
+def test_api_errors_are_not_negative_checks_or_empty_searches(make_client, status, code):
+    calls = []
+    payload = {"code": code, "message": "Upstream error"}
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status, json=payload)
+
+    instance = make_client(handler)
+    with pytest.raises(VatApiError) as caught:
+        instance.check_bank_account(NIP, "nip", ACCOUNT, DATE)
+    assert (caught.value.code, caught.value.message, caught.value.status_code) == (code, payload["message"], status)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("status", [302, 404, 503])
+def test_unstructured_http_errors(make_client, status):
+    instance = make_client(lambda _: httpx.Response(status, text="unavailable"))
+    with pytest.raises(VatTransportError, match=str(status)):
+        instance.search(NIP, "nip", DATE)
+
+
+def test_network_failure_no_retry(make_client):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise httpx.ConnectError("offline", request=request)
+
+    with pytest.raises(VatTransportError, match="offline"):
+        make_client(handler).search(NIP, "nip", DATE)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("body", [b"not JSON", b"[]", b"null", b'{"result":null}', b'{"result":{}}'])
+def test_malformed_response(make_client, body):
+    with pytest.raises(VatProtocolError):
+        make_client(lambda _: httpx.Response(200, content=body)).search(NIP, "nip", DATE)
+
+
+@pytest.mark.parametrize("field,value", [("subject", []), ("requestId", None), ("requestDateTime", "")])
+def test_invalid_single_result(make_client, field, value):
+    payload = fixture("search_result")
+    payload["result"][field] = value
+    with pytest.raises(VatProtocolError):
+        make_client(lambda _: httpx.Response(200, json=payload)).search(NIP, "nip", DATE)
+
+
+@pytest.mark.parametrize("entries", [None, [None], [{"identifier": NIP}], [{"identifier": NIP, "error": {}}], [{"identifier": NIP, "subjects": []}, {"identifier": "unexpected", "subjects": []}], []])
+def test_malformed_or_incomplete_batch_is_not_no_matches(make_client, entries):
+    payload = fixture("batch_result")
+    payload["result"]["entries"] = entries
+    with pytest.raises(VatProtocolError):
+        make_client(lambda _: httpx.Response(200, json=payload)).search_bulk([NIP], "nip", DATE)
+
+
+@pytest.mark.parametrize("value", [False, "", "UNKNOWN", None])
+def test_invalid_check_answer_is_protocol_error(make_client, value):
+    payload = fixture("check_result")
+    payload["result"]["accountAssigned"] = value
+    with pytest.raises(VatProtocolError):
+        make_client(lambda _: httpx.Response(200, json=payload)).check_bank_account(NIP, "nip", ACCOUNT, DATE)
+
+
+def test_response_size_guard(make_client, monkeypatch):
+    monkeypatch.setattr(module, "_MAX_RESPONSE_BYTES", 32)
+    with pytest.raises(VatProtocolError, match="maximum"):
+        make_client(lambda _: httpx.Response(200, content=b" " * 33)).search(NIP, "nip", DATE)
+
+
+@pytest.mark.parametrize("kwargs", [{"environment": "invalid"}, {"timeout": 0}, {"timeout": -1}, {"timeout": float("inf")}, {"timeout": float("nan")}])
+def test_invalid_config(kwargs):
+    with pytest.raises(ValueError):
+        VatConfig(**kwargs)
+
+
+def test_context_manager_closes_http(make_client):
+    with make_client(lambda _: httpx.Response(200, json=fixture("search_result"))) as instance:
+        assert not instance._http.is_closed
+    assert instance._http.is_closed

@@ -1,0 +1,20 @@
+{
+  "result": {
+    "subject": {
+      "name": "Przykładowa Firma Sp. z o.o.",
+      "nip": "3245174504",
+      "regon": "755016841",
+      "statusVat": "Czynny",
+      "workingAddress": "ul. Przykładowa 1, 00-001 Warszawa",
+      "representatives": [],
+      "authorizedClerks": [],
+      "partners": [],
+      "accountNumbers": ["70506405335016096312945164"],
+      "hasVirtualAccounts": true,
+      "registrationLegalDate": "2022-01-03",
+      "exemptionSmeDate": null
+    },
+    "requestDateTime": "27-10-2026 12:00:00",
+    "requestId": "test-confirmation"
+  }
+}

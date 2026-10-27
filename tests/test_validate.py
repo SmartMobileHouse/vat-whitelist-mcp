@@ -1,6 +1,6 @@
 import pytest
 
-from vat_whitelist_mcp.validate import normalize_krs, normalize_nip, normalize_regon
+from vat_whitelist_mcp.validate import normalize_nip, normalize_regon
 
 # --- NIP -------------------------------------------------------------------
 
@@ -64,22 +64,41 @@ def test_regon_rejects_wrong_length():
         normalize_regon("12345")
 
 
-# --- KRS -------------------------------------------------------------------
 
-def test_krs_zero_pads_short_input():
-    assert normalize_krs("543759") == "0000543759"
-    assert normalize_krs("0000543759") == "0000543759"
+from datetime import date
+
+from vat_whitelist_mcp.validate import normalize_bank_account, normalize_date
 
 
-def test_krs_rejects_all_zeros():
+@pytest.mark.parametrize("value", ["70506405335016096312945164", "PL70 5064 0533 5016 0963 1294 5164", "pl70506405335016096312945164"])
+def test_bank_account_normalizes_to_nrb(value):
+    assert normalize_bank_account(value) == "70506405335016096312945164"
+
+
+@pytest.mark.parametrize("value", ["70506405335016096312945165", "0" * 26, "DE70506405335016096312945164", "123", "abc", None, 70506405335016096312945164])
+def test_bank_account_rejects_invalid_input(value):
     with pytest.raises(ValueError):
-        normalize_krs("0000000000")
-    with pytest.raises(ValueError):
-        normalize_krs("0")
+        normalize_bank_account(value)
 
 
-def test_krs_rejects_too_long_or_alpha():
+@pytest.mark.parametrize("value", ["５２６１０４０８２８", "٥٢٦١٠٤٠٨٢٨", None, 5261040828])
+def test_nip_rejects_non_ascii_or_non_string(value):
     with pytest.raises(ValueError):
-        normalize_krs("12345678901")
+        normalize_nip(value)
+
+
+@pytest.mark.parametrize("value", ["2021-01-01", "2024-02-29", "2026-10-27"])
+def test_date_accepts_calendar_year_window(value):
+    assert normalize_date(value, today=date(2026, 10, 27)) == value
+
+
+@pytest.mark.parametrize("value", ["2020-12-31", "2026-10-28", "2024-02-30", "2026-1-01", "20260101", " 2026-01-01", None])
+def test_date_rejects_invalid_out_of_range_and_future(value):
     with pytest.raises(ValueError):
-        normalize_krs("12ab")
+        normalize_date(value, today=date(2026, 10, 27))
+
+
+def test_date_window_advances_at_year_boundary():
+    assert normalize_date("2021-01-01", today=date(2026, 12, 31)) == "2021-01-01"
+    with pytest.raises(ValueError):
+        normalize_date("2021-12-31", today=date(2027, 1, 1))

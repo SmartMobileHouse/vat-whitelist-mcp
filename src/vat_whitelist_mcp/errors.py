@@ -1,27 +1,23 @@
-"""Typed exceptions shared across the package.
-
-Kept in a dedicated module so both ``client`` and ``parse`` can raise them
-without a circular import.
-"""
-
-from __future__ import annotations
+"""Typed failures returned by the VAT White List client."""
 
 
-class RegonError(Exception):
-    """Base error for all REGON/BIR client failures."""
+class VatError(Exception):
+    """Base error for VAT White List client failures."""
 
 
-class RegonAuthError(RegonError):
-    """Login failed — e.g. an invalid or missing USER_KEY."""
+class VatTransportError(VatError):
+    """A network or HTTP failure without a structured API error."""
 
 
-class RegonSessionError(RegonError):
-    """The BIR session was rejected or has expired; a re-login may recover."""
+class VatProtocolError(VatError):
+    """A malformed, oversized, or unexpected API response."""
 
 
-class RegonTransportError(RegonError):
-    """A network/HTTP-level failure talking to the BIR endpoint."""
+class VatApiError(VatError):
+    """An upstream API failure, retaining its code, message and HTTP status."""
 
-
-class RegonProtocolError(RegonError):
-    """The service returned a malformed, oversized, or unexpected response."""
+    def __init__(self, code: str, message: str, status_code: int):
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        super().__init__(f"{code}: {message} (HTTP {status_code})")
