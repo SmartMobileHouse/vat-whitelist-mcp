@@ -1,7 +1,7 @@
 [project]
 name = "vat-whitelist-mcp"
 version = "0.1.0"
-description = "Model Context Protocol server for the Polish VAT White List (in development)."
+description = "Model Context Protocol server for the Polish VAT White List."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -26,7 +26,6 @@ dependencies = [
   # so a future 3.x could be too. httpx is intentionally left unbounded.
   "mcp>=2.0.0,<3",
   "httpx>=0.27",
-  "defusedxml>=0.7",
 ]
 
 [project.urls]
@@ -49,5 +48,18 @@ packages = ["src/vat_whitelist_mcp"]
 
 [tool.pytest.ini_options]
 markers = [
-  "network: integration tests that hit the live GUS BIR test endpoint",
+  "network: integration tests that hit the live VAT White List endpoints",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/README.md",
+  "/LICENSE",
+  "/pyproject.toml",
+  "/server.json",
+  "/uv.lock",
+  "/.python-version",
+  "/.env.example",
 ]

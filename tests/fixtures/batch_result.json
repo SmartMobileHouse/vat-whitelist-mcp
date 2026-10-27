@@ -1,0 +1,11 @@
+{
+  "result": {
+    "entries": [
+      {"identifier": "3245174504", "subjects": [{"name": "Przykładowa Firma Sp. z o.o.", "nip": "3245174504", "statusVat": "Czynny"}]},
+      {"identifier": "1854510877", "subjects": []},
+      {"identifier": "7250018312", "error": {"code": "WL-115", "message": "Nieprawidłowy NIP."}}
+    ],
+    "requestDateTime": "27-10-2026 12:00:00",
+    "requestId": "batch-confirmation"
+  }
+}
