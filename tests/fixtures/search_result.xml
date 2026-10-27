@@ -1,0 +1,20 @@
+<root>
+  <dane>
+    <Regon>000331501</Regon>
+    <Nip>5261040567</Nip>
+    <StatusNip></StatusNip>
+    <Nazwa>PRZYKLADOWA SPOLKA AKCYJNA</Nazwa>
+    <Wojewodztwo>MAZOWIECKIE</Wojewodztwo>
+    <Powiat>Warszawa</Powiat>
+    <Gmina>Srodmiescie</Gmina>
+    <Miejscowosc>Warszawa</Miejscowosc>
+    <KodPocztowy>00925</KodPocztowy>
+    <Ulica>ul. Testowa</Ulica>
+    <NrNieruchomosci>1</NrNieruchomosci>
+    <NrLokalu></NrLokalu>
+    <Typ>P</Typ>
+    <SilosID>6</SilosID>
+    <DataZakonczeniaDzialalnosci></DataZakonczeniaDzialalnosci>
+    <MiejscowoscPoczty>Warszawa</MiejscowoscPoczty>
+  </dane>
+</root>

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.SmartMobileHouse/vat-whitelist-mcp",
+  "title": "VAT White List (Poland)",
+  "description": "Polish VAT White List MCP server (in development; integration pending).",
+  "repository": {
+    "url": "https://github.com/SmartMobileHouse/vat-whitelist-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "vat-whitelist-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
