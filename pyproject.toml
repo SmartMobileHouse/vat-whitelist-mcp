@@ -1,6 +1,6 @@
 [project]
 name = "vat-whitelist-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Model Context Protocol server for the Polish VAT White List."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,6 +30,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://smartmobilehouse.com"
+Documentation = "https://smartmobilehouse.com/blog/open-source-mcp-server-vat-whitelist/"
 Repository = "https://github.com/SmartMobileHouse/vat-whitelist-mcp"
 Issues = "https://github.com/SmartMobileHouse/vat-whitelist-mcp/issues"
 
