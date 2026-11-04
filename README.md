@@ -13,6 +13,8 @@ returns taxpayer details, VAT status, bank accounts, and confirmation identifier
 
 > Built and maintained by [Smart Mobile House](https://smartmobilehouse.com) —
 > secure AI implementation for enterprise.
+>
+> Background and design notes: [the vat-whitelist-mcp write-up](https://smartmobilehouse.com/blog/open-source-mcp-server-vat-whitelist/).
 
 ## Tools
 
@@ -52,7 +54,7 @@ By default it uses the **sandbox**, with no API key or account required. Set
 `VAT_ENV=prod` for live data. For example, ask your assistant to look up a NIP
 using today's explicit date.
 
-After the first PyPI release, the package can also run as `uvx vat-whitelist-mcp`.
+It is also published on [PyPI](https://pypi.org/project/vat-whitelist-mcp/), so `uvx vat-whitelist-mcp` works too.
 
 ### Use it in Claude Desktop / Claude Code
 
