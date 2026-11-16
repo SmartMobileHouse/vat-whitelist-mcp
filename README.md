@@ -1,6 +1,30 @@
-# vat-whitelist-mcp
+<p align="center">
+  <a href="https://smartmobilehouse.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SmartMobileHouse/.github/main/profile/assets/smh-mark-light.svg">
+      <img src="https://raw.githubusercontent.com/SmartMobileHouse/.github/main/profile/assets/smh-mark-dark.svg" alt="Smart Mobile House" height="56">
+    </picture>
+  </a>
+</p>
+<h1 align="center">vat-whitelist-mcp</h1>
+<p align="center">
+  <strong>An MCP server for the Polish VAT White List (Wykaz podatników VAT).</strong><br>
+  Check a taxpayer by NIP, REGON or bank account, and verify an account against an active VAT taxpayer on a given date.
+</p>
 
 <!-- mcp-name: io.github.SmartMobileHouse/vat-whitelist-mcp -->
+
+<div align="center">
+
+[![PyPI](https://img.shields.io/pypi/v/vat-whitelist-mcp)](https://pypi.org/project/vat-whitelist-mcp/)
+[![Python](https://img.shields.io/pypi/pyversions/vat-whitelist-mcp)](https://pypi.org/project/vat-whitelist-mcp/)
+[![CI](https://github.com/SmartMobileHouse/vat-whitelist-mcp/actions/workflows/publish.yml/badge.svg)](https://github.com/SmartMobileHouse/vat-whitelist-mcp/actions/workflows/publish.yml)
+[![License](https://img.shields.io/github/license/SmartMobileHouse/vat-whitelist-mcp)](LICENSE)
+[![Smart Mobile House](https://img.shields.io/badge/built%20by-Smart%20Mobile%20House-1F3A38)](https://smartmobilehouse.com)
+
+</div>
+
+## What it does
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that gives AI
 assistants clean, typed access to the **Polish VAT White List** (Wykaz podatników
@@ -10,13 +34,6 @@ whether an account is associated with an active taxpayer on a specified date.
 The official [VAT White List API](https://www.gov.pl/web/kas/api-wykazu-podatnikow-vat)
 returns taxpayer details, VAT status, bank accounts, and confirmation identifiers.
 `vat-whitelist-mcp` exposes its REST search and check methods as five simple tools.
-
-> Built and maintained by [Smart Mobile House](https://smartmobilehouse.com) —
-> secure AI implementation for enterprise.
->
-> Background and design notes: [the vat-whitelist-mcp write-up](https://smartmobilehouse.com/blog/open-source-mcp-server-vat-whitelist/).
-
-## Tools
 
 | Tool | Description |
 | --- | --- |
@@ -40,6 +57,8 @@ or an upstream `error`; `count` counts entries. `requested` contains normalized
 inputs, and `unmatched` lists successful entries with no subjects. Failed entries
 are never treated as missing taxpayers. Checks preserve `accountAssigned` as
 `TAK` or `NIE`; API failures raise errors rather than returning `NIE`.
+
+Design notes: [the vat-whitelist-mcp write-up](https://smartmobilehouse.com/blog/open-source-mcp-server-vat-whitelist/).
 
 ## Quick start
 
@@ -87,6 +106,16 @@ During development, point it at a local checkout instead:
   }
 }
 ```
+
+## Status
+
+- [x] Search by NIP, REGON and bank account
+- [x] Bulk search of 1–30 identifiers of one type in a single request
+- [x] Account check against an active taxpayer by NIP or REGON, keeping `TAK` / `NIE` as returned
+- [x] Local NIP, REGON and bank-account checksum validation
+- [x] A `source` block with the register, environment and UTC retrieval time in every response
+- [x] Runs on the sandbox with no key; live data with `VAT_ENV=prod`
+- [x] Released through GitHub Actions with PyPI Trusted Publishing and MCP Registry metadata
 
 ## Configuration
 
@@ -161,6 +190,27 @@ independently after PyPI succeeds.
 - This project is independent and is not affiliated with or endorsed by the
   Ministry of Finance or the National Revenue Administration.
 
+## Contributing
+
+Issues and pull requests are welcome.
+
+## Why vat-whitelist-mcp?
+
+### Checks need a date and an audit trail
+
+The official VAT White List API answers for a specific date, and every check should show where and when the data came from.
+
+### Raw API calls leave the details to every integration
+
+- Identifier formats and checksums are easy to get wrong.
+- API failures must not be mistaken for a missing taxpayer.
+
+### This server keeps the checks strict
+
+- Explicit `YYYY-MM-DD` dates on every tool.
+- Checksums validated locally before any request.
+- API failures raise errors instead of returning `NIE`; request ids and timestamps are kept.
+
 ## License
 
-[MIT](LICENSE) © Smart Mobile House
+[MIT](LICENSE) © Smart Mobile House. Built and maintained by [Smart Mobile House](https://smartmobilehouse.com).
