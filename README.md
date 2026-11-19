@@ -1,10 +1,8 @@
 <p align="center">
-  <a href="https://smartmobilehouse.com">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SmartMobileHouse/.github/main/profile/assets/smh-mark-light.svg">
-      <img src="https://raw.githubusercontent.com/SmartMobileHouse/.github/main/profile/assets/smh-mark-dark.svg" alt="Smart Mobile House" height="56">
-    </picture>
-  </a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo.svg" alt="vat-whitelist-mcp logo" width="96" height="96">
+  </picture>
 </p>
 <h1 align="center">vat-whitelist-mcp</h1>
 <p align="center">
