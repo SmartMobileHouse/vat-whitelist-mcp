@@ -18,10 +18,10 @@ jobs:
     name: Build distributions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
 
       - name: Install locked dependencies
         run: uv sync --locked
@@ -63,7 +63,7 @@ jobs:
         run: uvx twine check dist/*
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dist
           path: dist/
@@ -80,13 +80,13 @@ jobs:
       id-token: write  # required for OIDC / Trusted Publishing
     steps:
       - name: Download distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dist
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
 
   publish-registry:
     name: Publish to MCP Registry
@@ -96,7 +96,7 @@ jobs:
       id-token: write  # OIDC — proves this repo belongs to the SmartMobileHouse org
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Resolve release version
         id: ver
@@ -111,8 +111,10 @@ jobs:
       # Keep server.json in lockstep with the release, so only pyproject.toml
       # and __init__.py need a version bump per release.
       - name: Sync server.json to the release version
+        env:
+          RELEASE_VERSION: ${{ steps.ver.outputs.version }}
         run: |
-          v='${{ steps.ver.outputs.version }}'
+          v="$RELEASE_VERSION"
           tmp="$(mktemp)"
           jq --arg v "$v" '.version = $v | .packages[0].version = $v' server.json > "$tmp"
           mv "$tmp" server.json
@@ -120,7 +122,12 @@ jobs:
 
       - name: Install mcp-publisher
         run: |
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          archive="${RUNNER_TEMP}/mcp-publisher_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.10/mcp-publisher_linux_amd64.tar.gz"
+          echo "32d287ed6fb7dc04eddd2621097784c06a355b2348b35ccc630a1643aa75ff4a  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" mcp-publisher
 
       - name: Give PyPI a moment to propagate the new version
         run: sleep 15

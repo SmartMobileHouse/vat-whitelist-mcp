@@ -1,6 +1,6 @@
 [project]
 name = "vat-whitelist-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "Model Context Protocol server for the Polish VAT White List."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,8 +24,13 @@ classifiers = [
 dependencies = [
   # Cap the MCP SDK below the next major: the 1.x -> 2.x jump was breaking,
   # so a future 3.x could be too. httpx is intentionally left unbounded.
-  "mcp>=2.0.0,<3",
+  "mcp>=2.3.0,<3",
   "httpx>=0.27",
+  # Security floors also protect installations that do not use uv.lock.
+  "certifi>=2026.10.19",
+  "httpx2>=2.12.0",
+  "opentelemetry-api>=1.45.2",
+  "PyJWT>=2.15.1",
 ]
 
 [project.urls]
